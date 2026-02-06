@@ -176,7 +176,7 @@ Monitor with debug logging:
 - Multiple log levels for debugging
 - Proper error handling for AWS API calls
 - Colorized status display for enhanced readability:
-  * Green for success states (CREATE_COMPLETE, UPDATE_COMPLETE, etc.)
-  * Yellow for progress states (CREATE_IN_PROGRESS, etc.)
-  * Red for failure states (CREATE_FAILED, etc.)
-  * Blue for warning states (ROLLBACK_IN_PROGRESS, etc.)
+  - Green for success states (CREATE_COMPLETE, UPDATE_COMPLETE, etc.)
+  - Yellow for progress states (CREATE_IN_PROGRESS, etc.)
+  - Red for failure states (CREATE_FAILED, etc.)
+  - Blue for warning states (ROLLBACK_IN_PROGRESS, etc.)
