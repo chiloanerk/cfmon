@@ -14,7 +14,7 @@ source "$PROJECT_ROOT/lib/cfmon.sh"
 # Display usage information
 usage() {
     cat << EOF
-Usage: cfmon <stack-name> [polling-interval] [max-runtime] [log-level]
+Usage: cfmon <stack-name> [polling-interval] [max-runtime] [log-level] [options]
 
 Arguments:
   stack-name        Name of the CloudFormation stack to monitor (required)
@@ -22,11 +22,20 @@ Arguments:
   max-runtime       Maximum runtime in seconds, 0 for no limit (default: 0)
   log-level         Log level: INFO or DEBUG (default: INFO)
 
+Options:
+  --group-by-type   Group events by resource type
+  --show-hierarchy  Show resource hierarchy visualization
+  --show-progress   Show progress indicator
+
 Examples:
-  cfmon my-stack                    # Monitor with defaults
-  cfmon my-stack 10                 # Poll every 10 seconds
-  cfmon my-stack 15 300             # Max 5 minutes runtime
-  cfmon my-stack 15 0 DEBUG         # Debug logging
+  cfmon my-stack                           # Monitor with defaults
+  cfmon my-stack 10                        # Poll every 10 seconds
+  cfmon my-stack 15 300                    # Max 5 minutes runtime
+  cfmon my-stack 15 0 DEBUG               # Debug logging
+  cfmon my-stack --group-by-type           # Group events by resource type
+  cfmon my-stack --show-hierarchy          # Show resource hierarchy
+  cfmon my-stack --show-progress           # Show progress indicator
+  cfmon my-stack --group-by-type --show-progress  # Multiple options
 
 Environment Variables:
   CFMON_AWS_CMD     AWS CLI command to use (default: aws)
@@ -39,16 +48,35 @@ EOF
 main() {
     # Trap SIGINT (Ctrl+C) and SIGTERM signals
     trap cleanup SIGINT SIGTERM
-    
+
     # Check prerequisites
     check_aws_cli || exit 1
     check_jq || exit 1
-    
+
     # Parse arguments
     local stack_name="$1"
     local polling_interval="${2:-15}"
     local max_runtime="${3:-0}"
-    CFMON_LOG_LEVEL="${4:-${CFMON_LOG_LEVEL:-INFO}}"
+    local log_level="${4:-INFO}"
+    local group_by_type=false
+    local show_hierarchy=false
+    local show_progress=false
+    
+    # Check for additional flags
+    if [ "$#" -ge 5 ]; then
+        for arg in "${@:5}"; do
+            if [ "$arg" = "--group-by-type" ]; then
+                group_by_type=true
+            elif [ "$arg" = "--show-hierarchy" ]; then
+                show_hierarchy=true
+            elif [ "$arg" = "--show-progress" ]; then
+                show_progress=true
+            fi
+        done
+    fi
+    
+    # Set log level
+    CFMON_LOG_LEVEL="$log_level"
     
     # Validate inputs
     if [ -z "$stack_name" ]; then
@@ -116,10 +144,39 @@ main() {
             continue
         fi
         
-        # Filter and display new events
-        local new_events
-        new_events=$(filter_new_events "$events_json" "$last_event_time")
+        # Count and display status summary
+        local status_counts
+        status_counts=$(count_statuses "$events_json")
+        local create_in_progress create_complete update_in_progress update_complete delete_in_progress delete_complete failed
+        read -r create_in_progress create_complete update_in_progress update_complete delete_in_progress delete_complete failed <<< "$status_counts"
         
+        # Display status summary bar
+        local summary_bar
+        summary_bar=$(format_status_summary "$create_in_progress" "$create_complete" "$update_in_progress" "$update_complete" "$delete_in_progress" "$delete_complete" "$failed")
+        echo -e "$summary_bar"
+        
+        # Show progress indicator if requested
+        if [ "$show_progress" = true ]; then
+            local total_resources
+            total_resources=$((create_in_progress + create_complete + update_in_progress + update_complete + delete_in_progress + delete_complete + failed))
+            local completed_resources
+            completed_resources=$((create_complete + update_complete + delete_complete))
+            local progress_indicator
+            progress_indicator=$(calculate_progress_indicator "$total_resources" "$completed_resources")
+            echo -e "${CFMON_COLOR_GREEN}Progress: $progress_indicator${CFMON_COLOR_NC}"
+        fi
+        echo ""  # Empty line for spacing
+
+        # Filter and display new events (with optional grouping or hierarchy)
+        local new_events
+        if [ "$show_hierarchy" = true ]; then
+            new_events=$(visualize_hierarchy "$events_json" "$last_event_time")
+        elif [ "$group_by_type" = true ]; then
+            new_events=$(group_events_by_type "$events_json" "$last_event_time")
+        else
+            new_events=$(filter_new_events "$events_json" "$last_event_time")
+        fi
+
         if [ -n "$new_events" ]; then
             echo "$new_events"
         else

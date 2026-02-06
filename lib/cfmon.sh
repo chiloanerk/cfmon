@@ -182,8 +182,12 @@ filter_new_events() {
             local colorized_status
             colorized_status=$(colorize_status "$status")
             
-            # Format the output with colorized status
-            printf "[%s] %s - %s (%s)\n" "$timestamp" "$colorized_status" "$resource_type" "$logical_id"
+            # Format timestamp as relative time
+            local formatted_time
+            formatted_time=$(format_relative_time "$timestamp")
+            
+            # Format the output with improved alignment
+            printf "%-20s %-25s %-40s (%s)\n" "[$formatted_time]" "$colorized_status" "$resource_type" "$logical_id"
         fi
     done <<< "$formatted_events"
 }
@@ -210,11 +214,11 @@ calculate_sleep_time() {
     local max_runtime="$2"
     local start_time="$3"
     local current_time="$4"
-    
+
     if [ "$max_runtime" -gt 0 ]; then
         local elapsed_time=$((current_time - start_time))
         local remaining_time=$((max_runtime - elapsed_time))
-        
+
         if [ "$remaining_time" -lt "$polling_interval" ]; then
             echo "$remaining_time"
         else
@@ -225,12 +229,35 @@ calculate_sleep_time() {
     fi
 }
 
+# Function to count different statuses in events
+count_statuses() {
+    local events_json="$1"
+    
+    # Count different status types using regex matching
+    local create_in_progress
+    create_in_progress=$(echo "$events_json" | jq -r '[.[] | select(.ResourceStatus | test("^CREATE_IN_PROGRESS"))] | length')
+    local create_complete
+    create_complete=$(echo "$events_json" | jq -r '[.[] | select(.ResourceStatus == "CREATE_COMPLETE")] | length')
+    local update_in_progress
+    update_in_progress=$(echo "$events_json" | jq -r '[.[] | select(.ResourceStatus | test("^UPDATE_IN_PROGRESS"))] | length')
+    local update_complete
+    update_complete=$(echo "$events_json" | jq -r '[.[] | select(.ResourceStatus == "UPDATE_COMPLETE")] | length')
+    local delete_in_progress
+    delete_in_progress=$(echo "$events_json" | jq -r '[.[] | select(.ResourceStatus | test("^DELETE_IN_PROGRESS"))] | length')
+    local delete_complete
+    delete_complete=$(echo "$events_json" | jq -r '[.[] | select(.ResourceStatus == "DELETE_COMPLETE")] | length')
+    local failed
+    failed=$(echo "$events_json" | jq -r '[.[] | select(.ResourceStatus | test("_FAILED$|_ROLLBACK_COMPLETE$"))] | length')
+    
+    echo "$create_in_progress $create_complete $update_in_progress $update_complete $delete_in_progress $delete_complete $failed"
+}
+
 # Function to check if runtime limit exceeded
 check_runtime_exceeded() {
     local max_runtime="$1"
     local start_time="$2"
     local current_time="$3"
-    
+
     if [ "$max_runtime" -gt 0 ]; then
         local elapsed_time=$((current_time - start_time))
         if [ "$elapsed_time" -ge "$max_runtime" ]; then
@@ -238,4 +265,178 @@ check_runtime_exceeded() {
         fi
     fi
     return 1
+}
+
+# Function to format timestamp as relative time
+format_relative_time() {
+    local timestamp="$1"
+    local current_time
+    current_time=$(date +%s)
+    
+    # Convert ISO 8601 timestamp to Unix timestamp
+    local event_time
+    if [[ "$(uname)" == "Darwin" ]]; then
+        # macOS date command
+        event_time=$(date -jf "%Y-%m-%dT%H:%M:%S" "${timestamp%.000Z}" +%s 2>/dev/null || echo 0)
+    else
+        # GNU date command (Linux)
+        event_time=$(date -d "$timestamp" +%s 2>/dev/null || echo 0)
+    fi
+    
+    if [ "$event_time" -eq 0 ]; then
+        # If conversion failed, return original timestamp
+        echo "$timestamp"
+        return
+    fi
+    
+    local diff
+    diff=$((current_time - event_time))
+    
+    if [ $diff -lt 60 ]; then
+        echo "${diff}s ago"
+    elif [ $diff -lt 3600 ]; then
+        local mins=$((diff / 60))
+        echo "${mins}m ago"
+    elif [ $diff -lt 86400 ]; then
+        local hours=$((diff / 3600))
+        echo "${hours}h ago"
+    else
+        local days=$((diff / 86400))
+        echo "${days}d ago"
+    fi
+}
+
+# Function to calculate progress indicator
+calculate_progress_indicator() {
+    local total_resources="$1"
+    local completed_resources="$2"
+    
+    if [ "$total_resources" -eq 0 ]; then
+        echo "[--------] 0%"
+        return
+    fi
+    
+    local percentage
+    percentage=$((completed_resources * 100 / total_resources))
+    local filled_bars
+    filled_bars=$((percentage * 10 / 100))
+    local empty_bars
+    empty_bars=$((10 - filled_bars))
+    
+    local progress=""
+    for ((i=0; i<filled_bars; i++)); do
+        progress="${progress}#"
+    done
+    for ((i=0; i<empty_bars; i++)); do
+        progress="${progress}-"
+    done
+    
+    printf "[%s] %d%%" "$progress" "$percentage"
+}
+
+# Function to visualize resource hierarchy
+visualize_hierarchy() {
+    local events_json="$1"
+    local last_time="$2"
+    
+    # For now, we'll simulate a simple hierarchy based on resource types
+    # In a more advanced implementation, this would parse actual dependencies
+    echo -e "${CFMON_COLOR_CYAN}├── AWS::CloudFormation::Stack${CFMON_COLOR_NC}"
+    
+    # Process events using command substitution to avoid subshell issues
+    # Use a more robust approach to handle the jq output
+    local event
+    while IFS= read -r event; do
+        if [ -n "$event" ] && [ "$event" != "" ]; then
+            # Extract fields from the event
+            local timestamp
+            timestamp=$(echo "$event" | jq -r '.Timestamp // empty')
+            local status
+            status=$(echo "$event" | jq -r '.ResourceStatus // empty')
+            local resource_type
+            resource_type=$(echo "$event" | jq -r '.ResourceType // empty')
+            local logical_id
+            logical_id=$(echo "$event" | jq -r '.LogicalResourceId // empty')
+            
+            # Skip if any field is empty
+            if [ -z "$timestamp" ] || [ -z "$status" ] || [ -z "$resource_type" ] || [ -z "$logical_id" ]; then
+                continue
+            fi
+            
+            # Skip the stack itself as it's already shown as root
+            if [ "$resource_type" != "AWS::CloudFormation::Stack" ]; then
+                # Get the colorized status
+                local colorized_status
+                colorized_status=$(colorize_status "$status")
+                
+                # Format timestamp as relative time
+                local formatted_time
+                formatted_time=$(format_relative_time "$timestamp")
+                
+                # Print with tree structure
+                if [ "$resource_type" = "AWS::IAM::Role" ] || [ "$resource_type" = "AWS::IAM::Policy" ]; then
+                    # IAM resources are usually first-level children
+                    printf "    ├── %s %s (%s) [%s]\n" "$resource_type" "$logical_id" "$colorized_status" "$formatted_time"
+                elif echo "$resource_type" | grep -q "^AWS::EC2::"; then
+                    # EC2 resources as second level
+                    printf "    │   ├── %s %s (%s) [%s]\n" "$resource_type" "$logical_id" "$colorized_status" "$formatted_time"
+                elif echo "$resource_type" | grep -q "^AWS::S3::"; then
+                    # S3 resources as third level
+                    printf "    │   │   ├── %s %s (%s) [%s]\n" "$resource_type" "$logical_id" "$colorized_status" "$formatted_time"
+                else
+                    # Other resources as fourth level
+                    printf "    │   │   │   ├── %s %s (%s) [%s]\n" "$resource_type" "$logical_id" "$colorized_status" "$formatted_time"
+                fi
+            fi
+        fi
+    done < <(echo "$events_json" | jq -c -r --arg last_time "$last_time" '
+        [ .[] | select(.Timestamp > $last_time) ] | 
+        sort_by(.ResourceType) | .[]
+    ')
+}
+
+# Function to group events by resource type
+group_events_by_type() {
+    local events_json="$1"
+    local last_time="$2"
+    
+    # Extract events with their details
+    local grouped_output
+    grouped_output=$(echo "$events_json" | jq -r --arg last_time "$last_time" '
+        [ .[] | select(.Timestamp > $last_time) ] | 
+        # Group by ResourceType
+        group_by(.ResourceType) |
+        .[] |
+        "=== \(.[0].ResourceType) ===",
+        (sort_by(.LogicalResourceId)[] | 
+            "\(.ResourceStatus)|\(.Timestamp)|\(.ResourceType)|\(.LogicalResourceId)"),
+        ""
+    ')
+    
+    # Process each line to add colorization
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then
+            if [[ "$line" =~ ^===.*=== ]]; then
+                # This is a header line
+                echo -e "${CFMON_COLOR_PURPLE}$line${CFMON_COLOR_NC}"
+            elif [ "$line" = "" ]; then
+                # Empty line
+                echo ""
+            else
+                # Regular event line
+                IFS='|' read -r status timestamp resource_type logical_id <<< "$line"
+                
+                # Get the colorized status
+                local colorized_status
+                colorized_status=$(colorize_status "$status")
+                
+                # Format timestamp as relative time
+                local formatted_time
+                formatted_time=$(format_relative_time "$timestamp")
+                
+                # Format the output with improved alignment
+                printf "%-20s %-25s %-40s (%s)\n" "[$formatted_time]" "$colorized_status" "$resource_type" "$logical_id"
+            fi
+        fi
+    done <<< "$grouped_output"
 }

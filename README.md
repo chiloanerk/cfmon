@@ -180,3 +180,77 @@ Monitor with debug logging:
   - Yellow for progress states (CREATE_IN_PROGRESS, etc.)
   - Red for failure states (CREATE_FAILED, etc.)
   - Blue for warning states (ROLLBACK_IN_PROGRESS, etc.)
+- Status summary bar showing counts of different resource states
+- Column alignment for improved readability
+- Relative timestamp formatting (e.g., '30s ago', '2m ago')
+- Resource grouping by type with `--group-by-type` option
+- Progress indicators with `--show-progress` option
+- Resource hierarchy visualization with `--show-hierarchy` option
+
+## Options
+
+- `--group-by-type`: Group events by resource type for better organization
+- `--show-hierarchy`: Show resource hierarchy visualization with tree-like structure
+- `--show-progress`: Display progress indicator showing completion percentage
+
+## Visual Enhancement Examples
+
+### Status Summary Bar
+
+Shows a summary of resource statuses at the top of the output:
+
+```text
+IN PROGRESS: C:2 U:1 D:0 | COMPLETE: C:5 U:2 D:0 | FAILED: 1
+```
+
+### Column Alignment
+
+Improved layout with consistent column alignment:
+
+```text
+[1m 30s ago]    CREATE_IN_PROGRESS    AWS::EC2::Instance        (MyInstance)
+[2m 15s ago]    CREATE_COMPLETE       AWS::S3::Bucket           (MyBucket)
+```
+
+### Relative Timestamps
+
+Human-readable timestamps showing relative time:
+
+```text
+[30s ago]    CREATE_IN_PROGRESS    AWS::EC2::Instance    (MyInstance)
+[2m 15s ago] CREATE_COMPLETE       AWS::S3::Bucket       (MyBucket)
+```
+
+### Resource Grouping
+
+Group events by resource type using the `--group-by-type` option:
+
+```text
+=== AWS::EC2::Instance ===
+[2m 15s ago]    CREATE_IN_PROGRESS    AWS::EC2::Instance    (WebServer)
+[1m 30s ago]    CREATE_COMPLETE       AWS::EC2::Instance    (AppServer)
+
+=== AWS::S3::Bucket ===
+[3m 45s ago]    CREATE_IN_PROGRESS    AWS::S3::Bucket       (DataBucket)
+```
+
+### Progress Indicators
+
+Visual progress bar using the `--show-progress` option:
+
+```text
+Progress: [#####-----] 50%
+```
+
+### Resource Hierarchy
+
+Tree-like structure showing resource relationships using the `--show-hierarchy` option:
+
+```text
+├── AWS::CloudFormation::Stack
+    ├── AWS::IAM::Role (InstanceRole)
+    │   ├── AWS::EC2::Instance (WebServer)
+    │   │   ├── AWS::S3::Bucket (WebData)
+    │   │   └── AWS::RDS::DBInstance (WebDatabase)
+    └── AWS::S3::Bucket (ConfigBucket)
+```

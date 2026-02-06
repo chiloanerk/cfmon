@@ -52,3 +52,16 @@ colorize_timestamp() {
     local timestamp="$1"
     echo -e "${CFMON_COLOR_WHITE}${timestamp}${CFMON_COLOR_NC}"
 }
+
+# Function to format status counts for summary bar
+format_status_summary() {
+    local create_in_progress="$1"
+    local create_complete="$2"
+    local update_in_progress="$3"
+    local update_complete="$4"
+    local delete_in_progress="$5"
+    local delete_complete="$6"
+    local failed="$7"
+    
+    echo -e "${CFMON_COLOR_YELLOW}IN PROGRESS:${CFMON_COLOR_NC} C:$create_in_progress U:$update_in_progress D:$delete_in_progress | ${CFMON_COLOR_GREEN}COMPLETE:${CFMON_COLOR_NC} C:$create_complete U:$update_complete D:$delete_complete | ${CFMON_COLOR_RED}FAILED:${CFMON_COLOR_NC} $failed"
+}
