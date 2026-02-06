@@ -1,0 +1,174 @@
+#!/bin/bash
+#
+# This script polls and prints AWS CloudFormation stack events in near real-time.
+# It's designed to run in the background during a deployment to provide visibility.
+#
+
+# Function to handle termination signals
+cleanup() {
+    echo ""
+    echo "Received termination signal. Exiting gracefully..."
+    exit 0
+}
+
+# Trap SIGINT (Ctrl+C) and SIGTERM signals
+trap cleanup SIGINT SIGTERM
+
+# Check if AWS CLI is installed
+if ! command -v aws &> /dev/null; then
+    echo "Error: AWS CLI is not installed. Please install it before running this script."
+    exit 1
+fi
+
+# Check if jq is installed (required for JSON processing)
+if ! command -v jq &> /dev/null; then
+    echo "Error: jq is not installed. Please install it before running this script."
+    exit 1
+fi
+
+STACK_NAME="$1"
+POLLING_INTERVAL="${2:-15}"  # Default to 15 seconds if not provided
+MAX_RUNTIME="${3:-0}"  # Default to 0 (no limit) if not provided
+
+# Validate polling interval is a positive integer
+if ! [[ "$POLLING_INTERVAL" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Error: Polling interval must be a positive integer (seconds)."
+    exit 1
+fi
+
+# Validate max runtime is a non-negative integer
+if ! [[ "$MAX_RUNTIME" =~ ^[0-9]+$ ]]; then
+    echo "Error: Max runtime must be a non-negative integer (seconds)."
+    exit 1
+fi
+
+# Cross-platform date command for "30 seconds ago" in UTC ISO 8601 format.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  # macOS (BSD) date command
+  LAST_EVENT_TIME=$(date -v-30S -u +"%Y-%m-%dT%H:%M:%SZ")
+else
+  # Linux (GNU) date command
+  LAST_EVENT_TIME=$(date -u -d "30 seconds ago" +"%Y-%m-%dT%H:%M:%SZ")
+fi
+
+if [ -z "$STACK_NAME" ]; then
+  echo "Error: Stack name must be provided as the first argument."
+  exit 1
+fi
+
+START_TIME=$(date +%s)
+
+echo "--- Starting real-time monitoring for stack: $STACK_NAME ---"
+echo "Polling interval: ${POLLING_INTERVAL} seconds"
+if [ "$MAX_RUNTIME" -gt 0 ]; then
+    echo "Maximum runtime: ${MAX_RUNTIME} seconds"
+fi
+LOG_LEVEL="${4:-INFO}"  # Default to INFO level if not provided
+
+# Function to log messages conditionally based on DEBUG flag
+log_message() {
+    local level=$1
+    shift
+    local message=$@
+
+    case $level in
+        DEBUG)
+            if [[ "$LOG_LEVEL" == "DEBUG" ]]; then
+                echo "[$level] $(date '+%Y-%m-%d %H:%M:%S') - $message" >&2
+            fi
+            ;;
+        *)
+            echo "[$level] $(date '+%Y-%m-%d %H:%M:%S') - $message" >&2
+            ;;
+    esac
+}
+
+echo "DEBUG: Initial LAST_EVENT_TIME set to: $LAST_EVENT_TIME"
+
+while true; do
+    # Check if maximum runtime has been reached (if set)
+    if [ "$MAX_RUNTIME" -gt 0 ]; then
+        CURRENT_TIME=$(date +%s)
+        ELAPSED_TIME=$((CURRENT_TIME - START_TIME))
+
+        if [ "$ELAPSED_TIME" -ge "$MAX_RUNTIME" ]; then
+            log_message "INFO" "Maximum runtime of ${MAX_RUNTIME} seconds reached. Exiting..."
+            exit 0
+        fi
+
+        # Calculate remaining time to ensure we don't exceed max run time due to sleep
+        REMAINING_TIME=$((MAX_RUNTIME - ELAPSED_TIME))
+        if [ "$REMAINING_TIME" -lt "$POLLING_INTERVAL" ]; then
+            # Adjust sleep time to not exceed max runtime
+            SLEEP_TIME="$REMAINING_TIME"
+            if [ "$SLEEP_TIME" -le 0 ]; then
+                log_message "INFO" "Maximum runtime reached during sleep check. Exiting..."
+                exit 0
+            fi
+        else
+            SLEEP_TIME="$POLLING_INTERVAL"
+        fi
+    else
+        # If no max runtime, just use the polling interval
+        SLEEP_TIME="$POLLING_INTERVAL"
+    fi
+
+    # Fetch all events once per loop.
+    ALL_EVENTS_JSON=$(aws cloudformation describe-stack-events --stack-name "$STACK_NAME" 2>/dev/null --query "StackEvents" --output json)
+
+    # Check if AWS CLI command failed
+    if [ $? -ne 0 ]; then
+        log_message "ERROR" "AWS CLI command failed. Please check your credentials and permissions."
+        sleep "$SLEEP_TIME"
+        continue
+    fi
+
+    if [ -z "$ALL_EVENTS_JSON" ]; then
+        log_message "WARN" "No events returned from AWS CLI. Possible issue with stack name or permissions."
+        sleep "$SLEEP_TIME"
+        continue
+    fi
+
+    if ! echo "$ALL_EVENTS_JSON" | jq -e . > /dev/null 2>&1; then
+        log_message "ERROR" "Invalid JSON received from AWS CLI."
+        log_message "DEBUG" "Raw AWS CLI output: $ALL_EVENTS_JSON"
+        sleep "$SLEEP_TIME"
+        continue
+    fi
+
+    # Let jq filter for new events and format them. This is much safer than shell interpolation.
+    NEW_EVENTS_TEXT=$(echo "$ALL_EVENTS_JSON" | jq -r --arg last_time "$LAST_EVENT_TIME" '
+        [ .[] | select(.Timestamp > $last_time) ] | reverse | .[] |
+        "[\(.Timestamp)] \(.ResourceStatus) - \(.ResourceType) (\(.LogicalResourceId))"
+    ')
+
+    # Print the new events if there are any.
+    if [ -n "$NEW_EVENTS_TEXT" ]; then
+        echo "$NEW_EVENTS_TEXT"
+    else
+        log_message "DEBUG" "No new events found since $LAST_EVENT_TIME."
+    fi
+
+    # ALWAYS update the time to the timestamp of the latest event returned by the API.
+    # The API returns events newest-first, so we just need the first item.
+    LATEST_TIMESTAMP=$(echo "$ALL_EVENTS_JSON" | jq -r '.[0].Timestamp' 2>/dev/null)
+
+    # Check if we could extract the timestamp
+    if [ $? -ne 0 ] || [ -z "$LATEST_TIMESTAMP" ] || [ "$LATEST_TIMESTAMP" = "null" ]; then
+        log_message "WARN" "Could not extract timestamp from events. Retrying..."
+        sleep "$SLEEP_TIME"
+        continue
+    fi
+
+    # Assign the new time if we got a valid, non-null timestamp.
+    if [ -n "$LATEST_TIMESTAMP" ] && [ "$LATEST_TIMESTAMP" != "null" ]; then
+        if [ "$LAST_EVENT_TIME" != "$LATEST_TIMESTAMP" ]; then
+            log_message "DEBUG" "Updating LAST_EVENT_TIME from $LAST_EVENT_TIME to $LATEST_TIMESTAMP"
+        fi
+        LAST_EVENT_TIME="$LATEST_TIMESTAMP"
+    else
+        log_message "WARN" "Could not extract LATEST_TIMESTAMP from ALL_EVENTS_JSON."
+    fi
+
+    sleep "$SLEEP_TIME"
+done
