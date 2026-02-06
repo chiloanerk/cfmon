@@ -237,6 +237,39 @@ load test_helper
     [ "$output" = "invalid-timestamp" ]
 }
 
+# Test group_events_by_type function
+@test "group_events_by_type groups events by resource type" {
+    local events_json='[
+        {
+            "Timestamp": "2023-01-01T12:00:01.000Z",
+            "ResourceStatus": "CREATE_IN_PROGRESS",
+            "ResourceType": "AWS::S3::Bucket",
+            "LogicalResourceId": "MyBucket"
+        },
+        {
+            "Timestamp": "2023-01-01T12:00:02.000Z",
+            "ResourceStatus": "CREATE_COMPLETE",
+            "ResourceType": "AWS::S3::Bucket",
+            "LogicalResourceId": "MyBucket"
+        },
+        {
+            "Timestamp": "2023-01-01T12:00:03.000Z",
+            "ResourceStatus": "CREATE_IN_PROGRESS",
+            "ResourceType": "AWS::EC2::Instance",
+            "LogicalResourceId": "MyInstance"
+        }
+    ]'
+    
+    run group_events_by_type "$events_json" "2023-01-01T11:00:00.000Z"
+    [ "$status" -eq 0 ]
+    
+    # Should contain both resource types in the output
+    [[ "$output" =~ "AWS::S3::Bucket" ]]
+    [[ "$output" =~ "AWS::EC2::Instance" ]]
+    # Should contain grouping headers
+    [[ "$output" =~ "===" ]]
+}
+
 # Test filter_new_events with colorization
 @test "filter_new_events returns properly formatted events with colorization" {
     # Mock events JSON with a single event

@@ -305,3 +305,49 @@ format_relative_time() {
         echo "${days}d ago"
     fi
 }
+
+# Function to group events by resource type
+group_events_by_type() {
+    local events_json="$1"
+    local last_time="$2"
+    
+    # Extract events with their details
+    local grouped_output
+    grouped_output=$(echo "$events_json" | jq -r --arg last_time "$last_time" '
+        [ .[] | select(.Timestamp > $last_time) ] | 
+        # Group by ResourceType
+        group_by(.ResourceType) |
+        .[] |
+        "=== \(.[0].ResourceType) ===",
+        (sort_by(.LogicalResourceId)[] | 
+            "\(.ResourceStatus)|\(.Timestamp)|\(.ResourceType)|\(.LogicalResourceId)"),
+        ""
+    ')
+    
+    # Process each line to add colorization
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then
+            if [[ "$line" =~ ^===.*=== ]]; then
+                # This is a header line
+                echo -e "${CFMON_COLOR_PURPLE}$line${CFMON_COLOR_NC}"
+            elif [ "$line" = "" ]; then
+                # Empty line
+                echo ""
+            else
+                # Regular event line
+                IFS='|' read -r status timestamp resource_type logical_id <<< "$line"
+                
+                # Get the colorized status
+                local colorized_status
+                colorized_status=$(colorize_status "$status")
+                
+                # Format timestamp as relative time
+                local formatted_time
+                formatted_time=$(format_relative_time "$timestamp")
+                
+                # Format the output with improved alignment
+                printf "%-20s %-25s %-40s (%s)\n" "[$formatted_time]" "$colorized_status" "$resource_type" "$logical_id"
+            fi
+        fi
+    done <<< "$grouped_output"
+}

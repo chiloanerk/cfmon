@@ -14,19 +14,21 @@ source "$PROJECT_ROOT/lib/cfmon.sh"
 # Display usage information
 usage() {
     cat << EOF
-Usage: cfmon <stack-name> [polling-interval] [max-runtime] [log-level]
+Usage: cfmon <stack-name> [polling-interval] [max-runtime] [log-level] [--group-by-type]
 
 Arguments:
   stack-name        Name of the CloudFormation stack to monitor (required)
   polling-interval  Polling interval in seconds (default: 15)
   max-runtime       Maximum runtime in seconds, 0 for no limit (default: 0)
   log-level         Log level: INFO or DEBUG (default: INFO)
+  --group-by-type   Group events by resource type (optional)
 
 Examples:
   cfmon my-stack                    # Monitor with defaults
   cfmon my-stack 10                 # Poll every 10 seconds
   cfmon my-stack 15 300             # Max 5 minutes runtime
   cfmon my-stack 15 0 DEBUG         # Debug logging
+  cfmon my-stack --group-by-type    # Group events by resource type
 
 Environment Variables:
   CFMON_AWS_CMD     AWS CLI command to use (default: aws)
@@ -39,16 +41,25 @@ EOF
 main() {
     # Trap SIGINT (Ctrl+C) and SIGTERM signals
     trap cleanup SIGINT SIGTERM
-    
+
     # Check prerequisites
     check_aws_cli || exit 1
     check_jq || exit 1
-    
+
     # Parse arguments
     local stack_name="$1"
     local polling_interval="${2:-15}"
     local max_runtime="${3:-0}"
-    CFMON_LOG_LEVEL="${4:-${CFMON_LOG_LEVEL:-INFO}}"
+    local log_level="${4:-INFO}"
+    local group_by_type=false
+    
+    # Check if the last argument is a flag for grouping
+    if [ "$#" -ge 5 ] && [ "${5}" = "--group-by-type" ]; then
+        group_by_type=true
+    fi
+    
+    # Set log level
+    CFMON_LOG_LEVEL="$log_level"
     
     # Validate inputs
     if [ -z "$stack_name" ]; then
@@ -128,9 +139,13 @@ main() {
         echo -e "$summary_bar"
         echo ""  # Empty line for spacing
 
-        # Filter and display new events
+        # Filter and display new events (with optional grouping)
         local new_events
-        new_events=$(filter_new_events "$events_json" "$last_event_time")
+        if [ "$group_by_type" = true ]; then
+            new_events=$(group_events_by_type "$events_json" "$last_event_time")
+        else
+            new_events=$(filter_new_events "$events_json" "$last_event_time")
+        fi
 
         if [ -n "$new_events" ]; then
             echo "$new_events"
