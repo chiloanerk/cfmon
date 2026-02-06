@@ -192,3 +192,53 @@ Monitor with debug logging:
 - `--group-by-type`: Group events by resource type for better organization
 - `--show-hierarchy`: Show resource hierarchy visualization with tree-like structure
 - `--show-progress`: Display progress indicator showing completion percentage
+
+## Visual Enhancement Examples
+
+### Status Summary Bar
+Shows a summary of resource statuses at the top of the output:
+```
+IN PROGRESS: C:2 U:1 D:0 | COMPLETE: C:5 U:2 D:0 | FAILED: 1
+```
+
+### Column Alignment
+Improved layout with consistent column alignment:
+```
+[1m 30s ago]    CREATE_IN_PROGRESS    AWS::EC2::Instance        (MyInstance)
+[2m 15s ago]    CREATE_COMPLETE       AWS::S3::Bucket           (MyBucket)
+```
+
+### Relative Timestamps
+Human-readable timestamps showing relative time:
+```
+[30s ago]    CREATE_IN_PROGRESS    AWS::EC2::Instance    (MyInstance)
+[2m 15s ago] CREATE_COMPLETE       AWS::S3::Bucket       (MyBucket)
+```
+
+### Resource Grouping
+Group events by resource type using the `--group-by-type` option:
+```
+=== AWS::EC2::Instance ===
+[2m 15s ago]    CREATE_IN_PROGRESS    AWS::EC2::Instance    (WebServer)
+[1m 30s ago]    CREATE_COMPLETE       AWS::EC2::Instance    (AppServer)
+
+=== AWS::S3::Bucket ===
+[3m 45s ago]    CREATE_IN_PROGRESS    AWS::S3::Bucket       (DataBucket)
+```
+
+### Progress Indicators
+Visual progress bar using the `--show-progress` option:
+```
+Progress: [#####-----] 50%
+```
+
+### Resource Hierarchy
+Tree-like structure showing resource relationships using the `--show-hierarchy` option:
+```
+├── AWS::CloudFormation::Stack
+    ├── AWS::IAM::Role (InstanceRole)
+    │   ├── AWS::EC2::Instance (WebServer)
+    │   │   ├── AWS::S3::Bucket (WebData)
+    │   │   └── AWS::RDS::DBInstance (WebDatabase)
+    └── AWS::S3::Bucket (ConfigBucket)
+```
