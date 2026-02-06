@@ -344,25 +344,24 @@ visualize_hierarchy() {
     echo -e "${CFMON_COLOR_CYAN}├── AWS::CloudFormation::Stack${CFMON_COLOR_NC}"
     
     # Process events using command substitution to avoid subshell issues
-    local events_output
-    events_output=$(echo "$events_json" | jq -r --arg last_time "$last_time" '
-        [ .[] | select(.Timestamp > $last_time) ] | 
-        sort_by(.ResourceType) | .[]
-    ')
-    
-    # Process each event in the output
-    local line
-    while IFS= read -r line; do
-        if [ -n "$line" ]; then
+    # Use a more robust approach to handle the jq output
+    local event
+    while IFS= read -r event; do
+        if [ -n "$event" ] && [ "$event" != "" ]; then
             # Extract fields from the event
             local timestamp
-            timestamp=$(echo "$line" | jq -r '.Timestamp')
+            timestamp=$(echo "$event" | jq -r '.Timestamp // empty')
             local status
-            status=$(echo "$line" | jq -r '.ResourceStatus')
+            status=$(echo "$event" | jq -r '.ResourceStatus // empty')
             local resource_type
-            resource_type=$(echo "$line" | jq -r '.ResourceType')
+            resource_type=$(echo "$event" | jq -r '.ResourceType // empty')
             local logical_id
-            logical_id=$(echo "$line" | jq -r '.LogicalResourceId')
+            logical_id=$(echo "$event" | jq -r '.LogicalResourceId // empty')
+            
+            # Skip if any field is empty
+            if [ -z "$timestamp" ] || [ -z "$status" ] || [ -z "$resource_type" ] || [ -z "$logical_id" ]; then
+                continue
+            fi
             
             # Skip the stack itself as it's already shown as root
             if [ "$resource_type" != "AWS::CloudFormation::Stack" ]; then
@@ -390,7 +389,10 @@ visualize_hierarchy() {
                 fi
             fi
         fi
-    done <<< "$events_output"
+    done < <(echo "$events_json" | jq -r --arg last_time "$last_time" '
+        [ .[] | select(.Timestamp > $last_time) ] | 
+        sort_by(.ResourceType) | .[]
+    ')
 }
 
 # Function to group events by resource type
