@@ -237,6 +237,23 @@ load test_helper
     [ "$output" = "invalid-timestamp" ]
 }
 
+# Test calculate_progress_indicator function
+@test "calculate_progress_indicator calculates progress correctly" {
+    run calculate_progress_indicator "10" "5"
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "[#####-----] 50%" ]]
+}
+
+@test "calculate_progress_indicator handles edge cases" {
+    run calculate_progress_indicator "0" "0"
+    [ "$status" -eq 0 ]
+    [ "$output" = "[--------] 0%" ]
+    
+    run calculate_progress_indicator "5" "5"
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "[##########] 100%" ]]
+}
+
 # Test group_events_by_type function
 @test "group_events_by_type groups events by resource type" {
     local events_json='[
@@ -268,6 +285,35 @@ load test_helper
     [[ "$output" =~ "AWS::EC2::Instance" ]]
     # Should contain grouping headers
     [[ "$output" =~ "===" ]]
+}
+
+# Test visualize_hierarchy function
+@test "visualize_hierarchy shows resource hierarchy" {
+    local events_json='[
+        {
+            "Timestamp": "2023-01-01T12:00:01.000Z",
+            "ResourceStatus": "CREATE_IN_PROGRESS",
+            "ResourceType": "AWS::S3::Bucket",
+            "LogicalResourceId": "MyBucket"
+        },
+        {
+            "Timestamp": "2023-01-01T12:00:02.000Z",
+            "ResourceStatus": "CREATE_IN_PROGRESS",
+            "ResourceType": "AWS::EC2::Instance",
+            "LogicalResourceId": "MyInstance"
+        }
+    ]'
+    
+    run visualize_hierarchy "$events_json" "2023-01-01T11:00:00.000Z"
+    [ "$status" -eq 0 ]
+    
+    # Should contain the root stack
+    [[ "$output" =~ "├── AWS::CloudFormation::Stack" ]]
+    # Should contain child resources
+    [[ "$output" =~ "AWS::S3::Bucket" ]]
+    [[ "$output" =~ "AWS::EC2::Instance" ]]
+    # Should contain tree characters
+    [[ "$output" =~ "├──" ]]
 }
 
 # Test filter_new_events with colorization

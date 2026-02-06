@@ -306,6 +306,88 @@ format_relative_time() {
     fi
 }
 
+# Function to calculate progress indicator
+calculate_progress_indicator() {
+    local total_resources="$1"
+    local completed_resources="$2"
+    
+    if [ "$total_resources" -eq 0 ]; then
+        echo "[--------] 0%"
+        return
+    fi
+    
+    local percentage
+    percentage=$((completed_resources * 100 / total_resources))
+    local filled_bars
+    filled_bars=$((percentage * 10 / 100))
+    local empty_bars
+    empty_bars=$((10 - filled_bars))
+    
+    local progress=""
+    for ((i=0; i<filled_bars; i++)); do
+        progress="${progress}#"
+    done
+    for ((i=0; i<empty_bars; i++)); do
+        progress="${progress}-"
+    done
+    
+    printf "[%s] %d%%" "$progress" "$percentage"
+}
+
+# Function to visualize resource hierarchy
+visualize_hierarchy() {
+    local events_json="$1"
+    local last_time="$2"
+    
+    # For now, we'll simulate a simple hierarchy based on resource types
+    # In a more advanced implementation, this would parse actual dependencies
+    echo -e "${CFMON_COLOR_CYAN}├── AWS::CloudFormation::Stack${CFMON_COLOR_NC}"
+    
+    # Extract and sort events by resource type
+    echo "$events_json" | jq -r --arg last_time "$last_time" '
+        [ .[] | select(.Timestamp > $last_time) ] | 
+        sort_by(.ResourceType) | .[]
+    ' | while IFS= read -r event; do
+        if [ -n "$event" ]; then
+            # Extract fields from the event
+            local timestamp
+            timestamp=$(echo "$event" | jq -r '.Timestamp')
+            local status
+            status=$(echo "$event" | jq -r '.ResourceStatus')
+            local resource_type
+            resource_type=$(echo "$event" | jq -r '.ResourceType')
+            local logical_id
+            logical_id=$(echo "$event" | jq -r '.LogicalResourceId')
+            
+            # Skip the stack itself as it's already shown as root
+            if [ "$resource_type" != "AWS::CloudFormation::Stack" ]; then
+                # Get the colorized status
+                local colorized_status
+                colorized_status=$(colorize_status "$status")
+                
+                # Format timestamp as relative time
+                local formatted_time
+                formatted_time=$(format_relative_time "$timestamp")
+                
+                # Print with tree structure
+                if [ "$resource_type" = "AWS::IAM::Role" ] || [ "$resource_type" = "AWS::IAM::Policy" ]; then
+                    # IAM resources are usually first-level children
+                    printf "    ├── %s %s (%s) [%s]\n" "$resource_type" "$logical_id" "$colorized_status" "$formatted_time"
+                elif [[ "$resource_type" == AWS::EC2::* ]]; then
+                    # EC2 resources as second level
+                    printf "    │   ├── %s %s (%s) [%s]\n" "$resource_type" "$logical_id" "$colorized_status" "$formatted_time"
+                elif [[ "$resource_type" == AWS::S3::* ]]; then
+                    # S3 resources as third level
+                    printf "    │   │   ├── %s %s (%s) [%s]\n" "$resource_type" "$logical_id" "$colorized_status" "$formatted_time"
+                else
+                    # Other resources as fourth level
+                    printf "    │   │   │   ├── %s %s (%s) [%s]\n" "$resource_type" "$logical_id" "$colorized_status" "$formatted_time"
+                fi
+            fi
+        fi
+    done
+}
+
 # Function to group events by resource type
 group_events_by_type() {
     local events_json="$1"
