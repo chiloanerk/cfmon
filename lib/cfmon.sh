@@ -389,7 +389,7 @@ visualize_hierarchy() {
                 fi
             fi
         fi
-    done < <(echo "$events_json" | jq -r --arg last_time "$last_time" '
+    done < <(echo "$events_json" | jq -c -r --arg last_time "$last_time" '
         [ .[] | select(.Timestamp > $last_time) ] | 
         sort_by(.ResourceType) | .[]
     ')
