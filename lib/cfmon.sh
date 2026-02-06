@@ -343,21 +343,26 @@ visualize_hierarchy() {
     # In a more advanced implementation, this would parse actual dependencies
     echo -e "${CFMON_COLOR_CYAN}├── AWS::CloudFormation::Stack${CFMON_COLOR_NC}"
     
-    # Extract and sort events by resource type
-    echo "$events_json" | jq -r --arg last_time "$last_time" '
+    # Process events using command substitution to avoid subshell issues
+    local events_output
+    events_output=$(echo "$events_json" | jq -r --arg last_time "$last_time" '
         [ .[] | select(.Timestamp > $last_time) ] | 
         sort_by(.ResourceType) | .[]
-    ' | while IFS= read -r event; do
-        if [ -n "$event" ]; then
+    ')
+    
+    # Process each event in the output
+    local line
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then
             # Extract fields from the event
             local timestamp
-            timestamp=$(echo "$event" | jq -r '.Timestamp')
+            timestamp=$(echo "$line" | jq -r '.Timestamp')
             local status
-            status=$(echo "$event" | jq -r '.ResourceStatus')
+            status=$(echo "$line" | jq -r '.ResourceStatus')
             local resource_type
-            resource_type=$(echo "$event" | jq -r '.ResourceType')
+            resource_type=$(echo "$line" | jq -r '.ResourceType')
             local logical_id
-            logical_id=$(echo "$event" | jq -r '.LogicalResourceId')
+            logical_id=$(echo "$line" | jq -r '.LogicalResourceId')
             
             # Skip the stack itself as it's already shown as root
             if [ "$resource_type" != "AWS::CloudFormation::Stack" ]; then
@@ -385,7 +390,7 @@ visualize_hierarchy() {
                 fi
             fi
         fi
-    done
+    done <<< "$events_output"
 }
 
 # Function to group events by resource type
