@@ -169,22 +169,21 @@ filter_new_events() {
     local formatted_events
     formatted_events=$(echo "$events_json" | jq -r --arg last_time "$last_time" '
         [ .[] | select(.Timestamp > $last_time) ] | reverse | .[] |
-        "\(.ResourceStatus)|[\(.Timestamp)] \(.ResourceStatus) - \(.ResourceType) (\(.LogicalResourceId))"
+        "\(.ResourceStatus)|\(.Timestamp)|\(.ResourceType)|\(.LogicalResourceId)"
     ')
 
     # Process each event to add color
     while IFS= read -r line; do
         if [ -n "$line" ]; then
-            local status="${line%%|*}"
-            local event_info="${line#*|}"
+            # Split the line by delimiter
+            IFS='|' read -r status timestamp resource_type logical_id <<< "$line"
             
             # Get the colorized status
             local colorized_status
             colorized_status=$(colorize_status "$status")
             
-            # Replace the plain status with the colorized one in the event info
-            local output_line="${event_info/\[$status\]/[$colorized_status]}"
-            echo -e "$output_line"
+            # Format the output with colorized status
+            printf "[%s] %s - %s (%s)\n" "$timestamp" "$colorized_status" "$resource_type" "$logical_id"
         fi
     done <<< "$formatted_events"
 }
