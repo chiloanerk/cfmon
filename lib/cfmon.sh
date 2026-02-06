@@ -4,6 +4,10 @@
 # This file contains all testable functions extracted from the main script
 #
 
+# Source the colors module
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/colors.sh"
+
 # Global configuration (can be overridden for testing)
 CFMON_AWS_CMD="${CFMON_AWS_CMD:-aws}"
 CFMON_LOG_LEVEL="${CFMON_LOG_LEVEL:-INFO}"
@@ -160,11 +164,29 @@ validate_json() {
 filter_new_events() {
     local events_json="$1"
     local last_time="$2"
-    
-    echo "$events_json" | jq -r --arg last_time "$last_time" '
+
+    # Extract events and format them with colors
+    local formatted_events
+    formatted_events=$(echo "$events_json" | jq -r --arg last_time "$last_time" '
         [ .[] | select(.Timestamp > $last_time) ] | reverse | .[] |
-        "[\(.Timestamp)] \(.ResourceStatus) - \(.ResourceType) (\(.LogicalResourceId))"
-    '
+        "\(.ResourceStatus)|[\(.Timestamp)] \(.ResourceStatus) - \(.ResourceType) (\(.LogicalResourceId))"
+    ')
+
+    # Process each event to add color
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then
+            local status="${line%%|*}"
+            local event_info="${line#*|}"
+            
+            # Get the colorized status
+            local colorized_status
+            colorized_status=$(colorize_status "$status")
+            
+            # Replace the plain status with the colorized one in the event info
+            local output_line="${event_info/\[$status\]/[$colorized_status]}"
+            echo -e "$output_line"
+        fi
+    done <<< "$formatted_events"
 }
 
 # Function to get the latest timestamp from events

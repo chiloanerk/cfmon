@@ -145,11 +145,13 @@ main() {
         
         if [ -n "$stack_status" ] && is_terminal_state "$stack_status"; then
             echo ""
+            local colorized_status
+            colorized_status=$(colorize_status "$stack_status")
             if is_success_state "$stack_status"; then
-                log_message "INFO" "Stack completed successfully: $stack_status"
+                log_message "INFO" "Stack completed successfully: $colorized_status"
                 exit 0
             else
-                log_message "ERROR" "Stack failed with status: $stack_status"
+                log_message "ERROR" "Stack failed with status: $colorized_status"
                 exit 1
             fi
         fi

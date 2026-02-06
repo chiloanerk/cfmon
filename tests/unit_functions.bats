@@ -145,3 +145,69 @@ load test_helper
     run check_runtime_exceeded "60" "1000" "1065"
     [ "$status" -eq 0 ]
 }
+
+# Test filter_new_events with colorization
+@test "filter_new_events returns properly formatted events with colorization" {
+    # Mock events JSON with a single event
+    local events_json='[
+        {
+            "Timestamp": "2023-01-01T12:00:00.000Z",
+            "ResourceStatus": "CREATE_IN_PROGRESS",
+            "ResourceType": "AWS::EC2::Instance",
+            "LogicalResourceId": "MyInstance"
+        }
+    ]'
+    
+    # Set up mock for colorize_status function to return predictable output
+    # We'll temporarily override colorize_status to return a simple format
+    original_colorize_status=$(declare -f colorize_status)
+    colorize_status() {
+        local status="$1"
+        echo -n "COLORIZED($status)"
+    }
+    
+    run filter_new_events "$events_json" "2023-01-01T11:00:00.000Z"
+    
+    # Restore original function
+    eval "$original_colorize_status"
+    
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "COLORIZED(CREATE_IN_PROGRESS)" ]]
+    [[ "$output" =~ "AWS::EC2::Instance" ]]
+    [[ "$output" =~ "MyInstance" ]]
+}
+
+@test "filter_new_events handles multiple events" {
+    local events_json='[
+        {
+            "Timestamp": "2023-01-01T12:00:01.000Z",
+            "ResourceStatus": "CREATE_IN_PROGRESS",
+            "ResourceType": "AWS::EC2::Instance",
+            "LogicalResourceId": "MyInstance"
+        },
+        {
+            "Timestamp": "2023-01-01T12:00:02.000Z",
+            "ResourceStatus": "CREATE_COMPLETE",
+            "ResourceType": "AWS::EC2::Instance",
+            "LogicalResourceId": "MyInstance"
+        }
+    ]'
+    
+    # Set up mock for colorize_status function
+    original_colorize_status=$(declare -f colorize_status)
+    colorize_status() {
+        local status="$1"
+        echo -n "COLORIZED($status)"
+    }
+    
+    run filter_new_events "$events_json" "2023-01-01T11:00:00.000Z"
+    
+    # Restore original function
+    eval "$original_colorize_status"
+    
+    [ "$status" -eq 0 ]
+    # Should have 2 lines of output
+    local line_count
+    line_count=$(echo "$output" | wc -l)
+    [ "$line_count" -ge 2 ]
+}

@@ -47,10 +47,12 @@ sudo ln -s "$(pwd)/cfmon" /usr/local/bin/cfmon
 ├── bin/
 │   └── cfmon               # Main executable script
 ├── lib/
-│   └── cfmon.sh            # Library with core functions (testable)
+│   ├── cfmon.sh            # Library with core functions (testable)
+│   └── colors.sh           # Module for colorizing output
 ├── tests/
 │   ├── test_helper.bash    # Test utilities and setup
 │   ├── unit_functions.bats # Unit tests for individual functions
+│   ├── unit_colors.bats    # Unit tests for colorization functions
 │   ├── integration_data.bats # Integration tests for data processing
 │   └── fixtures/           # Test data files
 └── .github/
@@ -173,3 +175,8 @@ Monitor with debug logging:
 - Optional runtime limits
 - Multiple log levels for debugging
 - Proper error handling for AWS API calls
+- Colorized status display for enhanced readability:
+  * Green for success states (CREATE_COMPLETE, UPDATE_COMPLETE, etc.)
+  * Yellow for progress states (CREATE_IN_PROGRESS, etc.)
+  * Red for failure states (CREATE_FAILED, etc.)
+  * Blue for warning states (ROLLBACK_IN_PROGRESS, etc.)
