@@ -158,23 +158,14 @@ load test_helper
         }
     ]'
     
-    # Set up mock for colorize_status function to return predictable output
-    # We'll temporarily override colorize_status to return a simple format
-    original_colorize_status=$(declare -f colorize_status)
-    colorize_status() {
-        local status="$1"
-        echo -n "COLORIZED($status)"
-    }
-    
     run filter_new_events "$events_json" "2023-01-01T11:00:00.000Z"
     
-    # Restore original function
-    eval "$original_colorize_status"
-    
     [ "$status" -eq 0 ]
-    [[ "$output" =~ "COLORIZED(CREATE_IN_PROGRESS)" ]]
-    [[ "$output" =~ "AWS::EC2::Instance" ]]
-    [[ "$output" =~ "MyInstance" ]]
+    [[ "$output" =~ "CREATE_IN_PROGRESS" ]]  # Check that the status is present
+    [[ "$output" =~ "AWS::EC2::Instance" ]]  # Check that the resource type is present
+    [[ "$output" =~ "MyInstance" ]]          # Check that the logical ID is present
+    # Check that ANSI color codes are present (indicating colorization occurred)
+    [[ "$output" =~ $'\033' ]]               # Check for ANSI escape sequence
 }
 
 @test "filter_new_events handles multiple events" {
@@ -193,21 +184,13 @@ load test_helper
         }
     ]'
     
-    # Set up mock for colorize_status function
-    original_colorize_status=$(declare -f colorize_status)
-    colorize_status() {
-        local status="$1"
-        echo -n "COLORIZED($status)"
-    }
-    
     run filter_new_events "$events_json" "2023-01-01T11:00:00.000Z"
-    
-    # Restore original function
-    eval "$original_colorize_status"
     
     [ "$status" -eq 0 ]
     # Should have 2 lines of output
     local line_count
     line_count=$(echo "$output" | wc -l)
     [ "$line_count" -ge 2 ]
+    # Check that ANSI color codes are present (indicating colorization occurred)
+    [[ "$output" =~ $'\033' ]]               # Check for ANSI escape sequence
 }
