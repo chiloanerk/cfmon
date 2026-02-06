@@ -145,3 +145,52 @@ load test_helper
     run check_runtime_exceeded "60" "1000" "1065"
     [ "$status" -eq 0 ]
 }
+
+# Test filter_new_events with colorization
+@test "filter_new_events returns properly formatted events with colorization" {
+    # Mock events JSON with a single event
+    local events_json='[
+        {
+            "Timestamp": "2023-01-01T12:00:00.000Z",
+            "ResourceStatus": "CREATE_IN_PROGRESS",
+            "ResourceType": "AWS::EC2::Instance",
+            "LogicalResourceId": "MyInstance"
+        }
+    ]'
+    
+    run filter_new_events "$events_json" "2023-01-01T11:00:00.000Z"
+    
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "CREATE_IN_PROGRESS" ]]  # Check that the status is present
+    [[ "$output" =~ "AWS::EC2::Instance" ]]  # Check that the resource type is present
+    [[ "$output" =~ "MyInstance" ]]          # Check that the logical ID is present
+    # Check that ANSI color codes are present (indicating colorization occurred)
+    [[ "$output" =~ $'\033' ]]               # Check for ANSI escape sequence
+}
+
+@test "filter_new_events handles multiple events" {
+    local events_json='[
+        {
+            "Timestamp": "2023-01-01T12:00:01.000Z",
+            "ResourceStatus": "CREATE_IN_PROGRESS",
+            "ResourceType": "AWS::EC2::Instance",
+            "LogicalResourceId": "MyInstance"
+        },
+        {
+            "Timestamp": "2023-01-01T12:00:02.000Z",
+            "ResourceStatus": "CREATE_COMPLETE",
+            "ResourceType": "AWS::EC2::Instance",
+            "LogicalResourceId": "MyInstance"
+        }
+    ]'
+    
+    run filter_new_events "$events_json" "2023-01-01T11:00:00.000Z"
+    
+    [ "$status" -eq 0 ]
+    # Should have 2 lines of output
+    local line_count
+    line_count=$(echo "$output" | wc -l)
+    [ "$line_count" -ge 2 ]
+    # Check that ANSI color codes are present (indicating colorization occurred)
+    [[ "$output" =~ $'\033' ]]               # Check for ANSI escape sequence
+}
