@@ -1,13 +1,13 @@
 # cfmon - CloudFormation Monitor
 
-A real-time monitoring tool for AWS CloudFormation stack events. Provides 
+A real-time monitoring tool for AWS CloudFormation stack events. Provides
 live visibility into stack updates, deployments, and changes as they happen.
 
 ## Overview
 
-`cfmon` polls CloudFormation stack events in near real-time, displaying 
-resource status changes, types, and logical IDs as they occur during 
-deployments. This provides visibility similar to the AWS Console's Events tab, 
+`cfmon` polls CloudFormation stack events in near real-time, displaying
+resource status changes, types, and logical IDs as they occur during
+deployments. This provides visibility similar to the AWS Console's Events tab,
 but in your terminal during automated deployments.
 
 ## Installation
@@ -28,7 +28,6 @@ sudo ln -s "$(pwd)/cfmon" /usr/local/bin/cfmon
 
 ### Prerequisites
 
-
 **Required:**
 
 - AWS CLI installed and configured with appropriate permissions
@@ -39,7 +38,6 @@ sudo ln -s "$(pwd)/cfmon" /usr/local/bin/cfmon
 
 - [Bats](https://github.com/bats-core/bats-core) - Bash Automated Testing System
 - ShellCheck (for linting)
-
 
 ## Project Structure
 
