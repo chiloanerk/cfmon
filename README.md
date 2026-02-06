@@ -180,3 +180,15 @@ Monitor with debug logging:
   - Yellow for progress states (CREATE_IN_PROGRESS, etc.)
   - Red for failure states (CREATE_FAILED, etc.)
   - Blue for warning states (ROLLBACK_IN_PROGRESS, etc.)
+- Status summary bar showing counts of different resource states
+- Column alignment for improved readability
+- Relative timestamp formatting (e.g., '30s ago', '2m ago')
+- Resource grouping by type with `--group-by-type` option
+- Progress indicators with `--show-progress` option
+- Resource hierarchy visualization with `--show-hierarchy` option
+
+## Options
+
+- `--group-by-type`: Group events by resource type for better organization
+- `--show-hierarchy`: Show resource hierarchy visualization with tree-like structure
+- `--show-progress`: Display progress indicator showing completion percentage
