@@ -83,6 +83,22 @@ log_message() {
     esac
 }
 
+# Function to check if a stack status is terminal (completed, failed, or rolled back)
+is_terminal_state() {
+    local status=$1
+    case "$status" in
+        CREATE_COMPLETE|UPDATE_COMPLETE|DELETE_COMPLETE|ROLLBACK_COMPLETE|UPDATE_ROLLBACK_COMPLETE)
+            return 0
+            ;;
+        CREATE_FAILED|DELETE_FAILED|UPDATE_FAILED|ROLLBACK_FAILED|UPDATE_ROLLBACK_FAILED)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 echo "DEBUG: Initial LAST_EVENT_TIME set to: $LAST_EVENT_TIME"
 
 while true; do
@@ -168,6 +184,15 @@ while true; do
         LAST_EVENT_TIME="$LATEST_TIMESTAMP"
     else
         log_message "WARN" "Could not extract LATEST_TIMESTAMP from ALL_EVENTS_JSON."
+    fi
+
+    # Check if the stack itself has reached a terminal state
+    STACK_STATUS=$(echo "$ALL_EVENTS_JSON" | jq -r '.[] | select(.ResourceType == "AWS::CloudFormation::Stack" and .LogicalResourceId == "'"$STACK_NAME"'") | .ResourceStatus' | head -1)
+    
+    if [ -n "$STACK_STATUS" ] && is_terminal_state "$STACK_STATUS"; then
+        echo ""
+        log_message "INFO" "Stack reached terminal state: $STACK_STATUS. Exiting..."
+        exit 0
     fi
 
     sleep "$SLEEP_TIME"
