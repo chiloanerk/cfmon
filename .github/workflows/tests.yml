@@ -1,0 +1,55 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  bats-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bats
+        uses: bats-core/bats-action@1.5.4
+        with:
+          bats-version: 1.10.0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Run Bats tests
+        run: |
+          chmod +x lib/cfmon.sh
+          bats --tap tests/
+
+      - name: Test script structure
+        run: |
+          # Verify the main script can be sourced without errors
+          chmod +x bin/cfmon
+          bash -c 'source lib/cfmon.sh; echo "Library loads successfully"'
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: './lib ./bin'
+          format: gcc
+
+  markdown-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Markdown Lint
+        uses: DavidAnson/markdownlint-cli2-action@v14
+        with:
+          globs: '**/*.md'

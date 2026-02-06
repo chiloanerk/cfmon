@@ -1,0 +1,164 @@
+#!/bin/bash
+#
+# cfmon - CloudFormation Monitor
+# Main executable script that orchestrates the monitoring process
+#
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Source the library
+source "$PROJECT_ROOT/lib/cfmon.sh"
+
+# Display usage information
+usage() {
+    cat << EOF
+Usage: cfmon <stack-name> [polling-interval] [max-runtime] [log-level]
+
+Arguments:
+  stack-name        Name of the CloudFormation stack to monitor (required)
+  polling-interval  Polling interval in seconds (default: 15)
+  max-runtime       Maximum runtime in seconds, 0 for no limit (default: 0)
+  log-level         Log level: INFO or DEBUG (default: INFO)
+
+Examples:
+  cfmon my-stack                    # Monitor with defaults
+  cfmon my-stack 10                 # Poll every 10 seconds
+  cfmon my-stack 15 300             # Max 5 minutes runtime
+  cfmon my-stack 15 0 DEBUG         # Debug logging
+
+Environment Variables:
+  CFMON_AWS_CMD     AWS CLI command to use (default: aws)
+  CFMON_LOG_LEVEL   Override log level
+
+EOF
+}
+
+# Main function
+main() {
+    # Trap SIGINT (Ctrl+C) and SIGTERM signals
+    trap cleanup SIGINT SIGTERM
+    
+    # Check prerequisites
+    check_aws_cli || exit 1
+    check_jq || exit 1
+    
+    # Parse arguments
+    local stack_name="$1"
+    local polling_interval="${2:-15}"
+    local max_runtime="${3:-0}"
+    CFMON_LOG_LEVEL="${4:-${CFMON_LOG_LEVEL:-INFO}}"
+    
+    # Validate inputs
+    if [ -z "$stack_name" ]; then
+        echo "Error: Stack name is required." >&2
+        usage >&2
+        exit 1
+    fi
+    
+    validate_polling_interval "$polling_interval" || exit 1
+    validate_max_runtime "$max_runtime" || exit 1
+    
+    # Initialize monitoring
+    local start_time
+    start_time=$(date +%s)
+    local last_event_time
+    last_event_time=$(get_initial_timestamp)
+    
+    echo "--- Starting real-time monitoring for stack: $stack_name ---"
+    echo "Polling interval: ${polling_interval} seconds"
+    if [ "$max_runtime" -gt 0 ]; then
+        echo "Maximum runtime: ${max_runtime} seconds"
+    fi
+    log_message "DEBUG" "Initial LAST_EVENT_TIME set to: $last_event_time"
+    
+    # Main monitoring loop
+    while true; do
+        local current_time
+        current_time=$(date +%s)
+        
+        # Check if maximum runtime has been reached
+        if check_runtime_exceeded "$max_runtime" "$start_time" "$current_time"; then
+            log_message "INFO" "Maximum runtime of ${max_runtime} seconds reached. Exiting..."
+            exit 0
+        fi
+        
+        # Calculate appropriate sleep time
+        local sleep_time
+        sleep_time=$(calculate_sleep_time "$polling_interval" "$max_runtime" "$start_time" "$current_time")
+        
+        if [ "$sleep_time" -le 0 ]; then
+            log_message "INFO" "Maximum runtime reached. Exiting..."
+            exit 0
+        fi
+        
+        # Fetch events
+        local events_json
+        events_json=$(fetch_stack_events "$stack_name")
+        
+        if [ $? -ne 0 ]; then
+            log_message "ERROR" "Failed to fetch stack events"
+            sleep "$sleep_time"
+            continue
+        fi
+        
+        if [ -z "$events_json" ]; then
+            log_message "WARN" "No events returned. Possible issue with stack name or permissions."
+            sleep "$sleep_time"
+            continue
+        fi
+        
+        if ! validate_json "$events_json"; then
+            log_message "ERROR" "Invalid JSON received from AWS CLI"
+            log_message "DEBUG" "Raw output: $events_json"
+            sleep "$sleep_time"
+            continue
+        fi
+        
+        # Filter and display new events
+        local new_events
+        new_events=$(filter_new_events "$events_json" "$last_event_time")
+        
+        if [ -n "$new_events" ]; then
+            echo "$new_events"
+        else
+            log_message "DEBUG" "No new events found since $last_event_time"
+        fi
+        
+        # Update timestamp
+        local latest_timestamp
+        latest_timestamp=$(get_latest_timestamp "$events_json")
+        
+        if [ -n "$latest_timestamp" ] && [ "$latest_timestamp" != "null" ]; then
+            if [ "$last_event_time" != "$latest_timestamp" ]; then
+                log_message "DEBUG" "Updating timestamp from $last_event_time to $latest_timestamp"
+            fi
+            last_event_time="$latest_timestamp"
+        else
+            log_message "WARN" "Could not extract timestamp from events"
+        fi
+        
+        # Check for terminal state
+        local stack_status
+        stack_status=$(get_stack_status "$events_json" "$stack_name")
+        
+        if [ -n "$stack_status" ] && is_terminal_state "$stack_status"; then
+            echo ""
+            if is_success_state "$stack_status"; then
+                log_message "INFO" "Stack completed successfully: $stack_status"
+                exit 0
+            else
+                log_message "ERROR" "Stack failed with status: $stack_status"
+                exit 1
+            fi
+        fi
+        
+        sleep "$sleep_time"
+    done
+}
+
+# Run main if executed directly (not sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
