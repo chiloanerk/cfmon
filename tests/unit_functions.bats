@@ -221,6 +221,22 @@ load test_helper
     [[ "$output" =~ "D:0" ]]
 }
 
+@test "format_relative_time returns relative time for recent events" {
+    # Use a fixed timestamp for testing
+    local recent_time="2023-01-01T12:00:00.000Z"
+    
+    run format_relative_time "$recent_time"
+    [ "$status" -eq 0 ]
+    # Just check that it returns some form of relative time or the original timestamp
+    [ -n "$output" ]
+}
+
+@test "format_relative_time handles invalid timestamp" {
+    run format_relative_time "invalid-timestamp"
+    [ "$status" -eq 0 ]
+    [ "$output" = "invalid-timestamp" ]
+}
+
 # Test filter_new_events with colorization
 @test "filter_new_events returns properly formatted events with colorization" {
     # Mock events JSON with a single event

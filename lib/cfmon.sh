@@ -182,8 +182,12 @@ filter_new_events() {
             local colorized_status
             colorized_status=$(colorize_status "$status")
             
-            # Format the output with colorized status
-            printf "[%s] %s - %s (%s)\n" "$timestamp" "$colorized_status" "$resource_type" "$logical_id"
+            # Format timestamp as relative time
+            local formatted_time
+            formatted_time=$(format_relative_time "$timestamp")
+            
+            # Format the output with improved alignment
+            printf "%-20s %-25s %-40s (%s)\n" "[$formatted_time]" "$colorized_status" "$resource_type" "$logical_id"
         fi
     done <<< "$formatted_events"
 }
@@ -253,7 +257,7 @@ check_runtime_exceeded() {
     local max_runtime="$1"
     local start_time="$2"
     local current_time="$3"
-    
+
     if [ "$max_runtime" -gt 0 ]; then
         local elapsed_time=$((current_time - start_time))
         if [ "$elapsed_time" -ge "$max_runtime" ]; then
@@ -261,4 +265,43 @@ check_runtime_exceeded() {
         fi
     fi
     return 1
+}
+
+# Function to format timestamp as relative time
+format_relative_time() {
+    local timestamp="$1"
+    local current_time
+    current_time=$(date +%s)
+    
+    # Convert ISO 8601 timestamp to Unix timestamp
+    local event_time
+    if [[ "$(uname)" == "Darwin" ]]; then
+        # macOS date command
+        event_time=$(date -jf "%Y-%m-%dT%H:%M:%S" "${timestamp%.000Z}" +%s 2>/dev/null || echo 0)
+    else
+        # GNU date command (Linux)
+        event_time=$(date -d "$timestamp" +%s 2>/dev/null || echo 0)
+    fi
+    
+    if [ "$event_time" -eq 0 ]; then
+        # If conversion failed, return original timestamp
+        echo "$timestamp"
+        return
+    fi
+    
+    local diff
+    diff=$((current_time - event_time))
+    
+    if [ $diff -lt 60 ]; then
+        echo "${diff}s ago"
+    elif [ $diff -lt 3600 ]; then
+        local mins=$((diff / 60))
+        echo "${mins}m ago"
+    elif [ $diff -lt 86400 ]; then
+        local hours=$((diff / 3600))
+        echo "${hours}h ago"
+    else
+        local days=$((diff / 86400))
+        echo "${days}d ago"
+    fi
 }
