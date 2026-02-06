@@ -378,10 +378,10 @@ visualize_hierarchy() {
                 if [ "$resource_type" = "AWS::IAM::Role" ] || [ "$resource_type" = "AWS::IAM::Policy" ]; then
                     # IAM resources are usually first-level children
                     printf "    ├── %s %s (%s) [%s]\n" "$resource_type" "$logical_id" "$colorized_status" "$formatted_time"
-                elif [[ "$resource_type" == AWS::EC2::* ]]; then
+                elif echo "$resource_type" | grep -q "^AWS::EC2::"; then
                     # EC2 resources as second level
                     printf "    │   ├── %s %s (%s) [%s]\n" "$resource_type" "$logical_id" "$colorized_status" "$formatted_time"
-                elif [[ "$resource_type" == AWS::S3::* ]]; then
+                elif echo "$resource_type" | grep -q "^AWS::S3::"; then
                     # S3 resources as third level
                     printf "    │   │   ├── %s %s (%s) [%s]\n" "$resource_type" "$logical_id" "$colorized_status" "$formatted_time"
                 else
