@@ -6,11 +6,110 @@ A real-time monitoring tool for AWS CloudFormation stack events. Provides live v
 
 `cfmon` polls CloudFormation stack events in near real-time, displaying resource status changes, types, and logical IDs as they occur during deployments. This provides visibility similar to the AWS Console's Events tab, but in your terminal during automated deployments.
 
-## Prerequisites
+## Installation
 
+### Quick Install (macOS/Linux)
+
+```bash
+# Clone the repository
+git clone https://github.com/chiloanerk/cfmon.git
+cd cfmon
+
+# Make executable
+chmod +x cfmon
+
+# Optional: Add to PATH
+sudo ln -s "$(pwd)/cfmon" /usr/local/bin/cfmon
+```
+
+### Prerequisites
+
+**Required:**
 - AWS CLI installed and configured with appropriate permissions
 - `jq` for JSON processing
-- Bash-compatible shell
+- Bash-compatible shell (bash 4.0+)
+
+**For Development:**
+- [Bats](https://github.com/bats-core/bats-core) - Bash Automated Testing System
+- ShellCheck (for linting)
+
+## Project Structure
+
+```
+.
+├── cfmon                    # Backward compatibility wrapper
+├── bin/
+│   └── cfmon               # Main executable script
+├── lib/
+│   └── cfmon.sh            # Library with core functions (testable)
+├── tests/
+│   ├── test_helper.bash    # Test utilities and setup
+│   ├── unit_functions.bats # Unit tests for individual functions
+│   ├── integration_data.bats # Integration tests for data processing
+│   └── fixtures/           # Test data files
+└── .github/
+    └── workflows/
+        └── tests.yml       # CI/CD pipeline
+```
+
+## Development
+
+### Running Tests Locally
+
+Install Bats:
+```bash
+# macOS
+brew install bats-core
+
+# Ubuntu/Debian
+sudo apt-get install bats
+```
+
+Run all tests:
+```bash
+bats tests/
+```
+
+Run specific test file:
+```bash
+bats tests/unit_functions.bats
+```
+
+Run with TAP output:
+```bash
+bats --tap tests/
+```
+
+### Testing with Mocks
+
+The test framework supports mocking AWS CLI calls by setting `CFMON_AWS_CMD` environment variable:
+
+```bash
+# Create a mock aws command
+export CFMON_AWS_CMD="/path/to/mock-aws"
+
+# Or point to a fixture file
+export CFMON_AWS_CMD="cat tests/fixtures/create-complete.json"
+```
+
+### Code Quality
+
+Run ShellCheck:
+```bash
+shellcheck lib/cfmon.sh bin/cfmon
+```
+
+## CI/CD
+
+This project uses GitHub Actions for continuous integration. The workflow:
+- Runs all Bats tests on every push and PR
+- Performs ShellCheck linting
+- Validates markdown files
+
+## Environment Variables
+
+- `CFMON_AWS_CMD`: Override the AWS CLI command (default: `aws`)
+- `CFMON_LOG_LEVEL`: Set log level (default: `INFO`, options: `INFO`, `DEBUG`)
 
 ## Usage
 

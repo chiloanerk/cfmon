@@ -1,0 +1,32 @@
+[
+  {
+    "StackId": "arn:aws:cloudformation:us-east-1:123456789012:stack/my-stack/12345",
+    "EventId": "12345-1",
+    "StackName": "my-stack",
+    "LogicalResourceId": "my-stack",
+    "PhysicalResourceId": "arn:aws:cloudformation:us-east-1:123456789012:stack/my-stack/12345",
+    "ResourceType": "AWS::CloudFormation::Stack",
+    "Timestamp": "2024-01-15T10:00:00.000Z",
+    "ResourceStatus": "CREATE_COMPLETE"
+  },
+  {
+    "StackId": "arn:aws:cloudformation:us-east-1:123456789012:stack/my-stack/12345",
+    "EventId": "12345-2",
+    "StackName": "my-stack",
+    "LogicalResourceId": "MyBucket",
+    "PhysicalResourceId": "my-bucket-12345",
+    "ResourceType": "AWS::S3::Bucket",
+    "Timestamp": "2024-01-15T09:59:45.000Z",
+    "ResourceStatus": "CREATE_COMPLETE"
+  },
+  {
+    "StackId": "arn:aws:cloudformation:us-east-1:123456789012:stack/my-stack/12345",
+    "EventId": "12345-3",
+    "StackName": "my-stack",
+    "LogicalResourceId": "MyBucket",
+    "PhysicalResourceId": "my-bucket-12345",
+    "ResourceType": "AWS::S3::Bucket",
+    "Timestamp": "2024-01-15T09:59:30.000Z",
+    "ResourceStatus": "CREATE_IN_PROGRESS"
+  }
+]
