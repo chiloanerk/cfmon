@@ -210,11 +210,11 @@ calculate_sleep_time() {
     local max_runtime="$2"
     local start_time="$3"
     local current_time="$4"
-    
+
     if [ "$max_runtime" -gt 0 ]; then
         local elapsed_time=$((current_time - start_time))
         local remaining_time=$((max_runtime - elapsed_time))
-        
+
         if [ "$remaining_time" -lt "$polling_interval" ]; then
             echo "$remaining_time"
         else
@@ -223,6 +223,29 @@ calculate_sleep_time() {
     else
         echo "$polling_interval"
     fi
+}
+
+# Function to count different statuses in events
+count_statuses() {
+    local events_json="$1"
+    
+    # Count different status types using regex matching
+    local create_in_progress
+    create_in_progress=$(echo "$events_json" | jq -r '[.[] | select(.ResourceStatus | test("^CREATE_IN_PROGRESS"))] | length')
+    local create_complete
+    create_complete=$(echo "$events_json" | jq -r '[.[] | select(.ResourceStatus == "CREATE_COMPLETE")] | length')
+    local update_in_progress
+    update_in_progress=$(echo "$events_json" | jq -r '[.[] | select(.ResourceStatus | test("^UPDATE_IN_PROGRESS"))] | length')
+    local update_complete
+    update_complete=$(echo "$events_json" | jq -r '[.[] | select(.ResourceStatus == "UPDATE_COMPLETE")] | length')
+    local delete_in_progress
+    delete_in_progress=$(echo "$events_json" | jq -r '[.[] | select(.ResourceStatus | test("^DELETE_IN_PROGRESS"))] | length')
+    local delete_complete
+    delete_complete=$(echo "$events_json" | jq -r '[.[] | select(.ResourceStatus == "DELETE_COMPLETE")] | length')
+    local failed
+    failed=$(echo "$events_json" | jq -r '[.[] | select(.ResourceStatus | test("_FAILED$|_ROLLBACK_COMPLETE$"))] | length')
+    
+    echo "$create_in_progress $create_complete $update_in_progress $update_complete $delete_in_progress $delete_complete $failed"
 }
 
 # Function to check if runtime limit exceeded

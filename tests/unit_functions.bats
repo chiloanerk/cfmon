@@ -146,6 +146,81 @@ load test_helper
     [ "$status" -eq 0 ]
 }
 
+# Test count_statuses function
+@test "count_statuses counts different status types correctly" {
+    local events_json='[
+        {
+            "Timestamp": "2023-01-01T12:00:01.000Z",
+            "ResourceStatus": "CREATE_IN_PROGRESS",
+            "ResourceType": "AWS::EC2::Instance",
+            "LogicalResourceId": "MyInstance1"
+        },
+        {
+            "Timestamp": "2023-01-01T12:00:02.000Z",
+            "ResourceStatus": "CREATE_COMPLETE",
+            "ResourceType": "AWS::EC2::Instance",
+            "LogicalResourceId": "MyInstance1"
+        },
+        {
+            "Timestamp": "2023-01-01T12:00:03.000Z",
+            "ResourceStatus": "UPDATE_IN_PROGRESS",
+            "ResourceType": "AWS::S3::Bucket",
+            "LogicalResourceId": "MyBucket"
+        },
+        {
+            "Timestamp": "2023-01-01T12:00:04.000Z",
+            "ResourceStatus": "CREATE_FAILED",
+            "ResourceType": "AWS::RDS::DBInstance",
+            "LogicalResourceId": "MyDB"
+        }
+    ]'
+    
+    run count_statuses "$events_json"
+    [ "$status" -eq 0 ]
+    
+    # Parse the output
+    local create_in_progress create_complete update_in_progress update_complete delete_in_progress delete_complete failed
+    read -r create_in_progress create_complete update_in_progress update_complete delete_in_progress delete_complete failed <<< "$output"
+    
+    [ "$create_in_progress" -eq 1 ]
+    [ "$create_complete" -eq 1 ]
+    [ "$update_in_progress" -eq 1 ]
+    [ "$update_complete" -eq 0 ]
+    [ "$delete_in_progress" -eq 0 ]
+    [ "$delete_complete" -eq 0 ]
+    [ "$failed" -eq 1 ]
+}
+
+@test "count_statuses handles empty events" {
+    local events_json='[]'
+    
+    run count_statuses "$events_json"
+    [ "$status" -eq 0 ]
+    
+    # Parse the output
+    local create_in_progress create_complete update_in_progress update_complete delete_in_progress delete_complete failed
+    read -r create_in_progress create_complete update_in_progress update_complete delete_in_progress delete_complete failed <<< "$output"
+    
+    [ "$create_in_progress" -eq 0 ]
+    [ "$create_complete" -eq 0 ]
+    [ "$update_in_progress" -eq 0 ]
+    [ "$update_complete" -eq 0 ]
+    [ "$delete_in_progress" -eq 0 ]
+    [ "$delete_complete" -eq 0 ]
+    [ "$failed" -eq 0 ]
+}
+
+@test "format_status_summary returns properly formatted string" {
+    run format_status_summary "2" "3" "1" "4" "0" "0" "1"
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "IN PROGRESS:" ]]
+    [[ "$output" =~ "COMPLETE:" ]]
+    [[ "$output" =~ "FAILED:" ]]
+    [[ "$output" =~ "C:2" ]]
+    [[ "$output" =~ "U:1" ]]
+    [[ "$output" =~ "D:0" ]]
+}
+
 # Test filter_new_events with colorization
 @test "filter_new_events returns properly formatted events with colorization" {
     # Mock events JSON with a single event
